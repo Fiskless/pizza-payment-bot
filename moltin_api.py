@@ -20,7 +20,7 @@ def create_product(moltin_api_token, product_id, name, description, price):
             'manage_stock': False,
             'price': [
                 {
-                    'amount': price,
+                    'amount': price*100,
                     'currency': 'RUB',
                     'includes_tax': False,
                 },
@@ -164,21 +164,23 @@ def create_entry_to_flow(moltin_api_token, flow_slug, address, alias, longitude,
     return response.json()
 
 
-def add_product_to_cart(cart_id, product_id, quantity, moltin_api_token):
+def add_product_to_cart(cart_id, product_id, moltin_api_token):
     headers = {
         'Authorization': f'Bearer {moltin_api_token}',
         'Content-Type': 'application/json',
+        'X-MOLTIN-CURRENCY': 'RUB',
     }
 
     payload = {"data": {'id': product_id,
                         'type': 'cart_item',
-                        'quantity': quantity
+                        'quantity': 1,
                         }
                }
 
     response = requests.post(f'https://api.moltin.com/v2/carts/{cart_id}/items',
                              headers=headers,
                              json=payload)
+    print(response.json())
     response.raise_for_status()
     return response.json()['data']
 
@@ -278,4 +280,5 @@ def get_access_token(moltin_client_id,
     expire_time = auth_response['expires_in']
 
     return moltin_api_token, expire_time
+
 

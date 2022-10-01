@@ -1,16 +1,11 @@
-# with open("menu.json", "r") as file:
-#   menu = file.read()
-# print(menu)
-# with open("address.json", "r") as file:
-#   address = file.read()
-# print(address)
 import json
 
 from environs import Env
 
 from moltin_api import get_access_token, \
     relate_image_to_product, \
-    create_flow, add_field_to_flow, create_entry_to_flow
+    create_flow, add_field_to_flow, create_entry_to_flow, get_products, \
+    get_cart
 
 
 def add_products_to_store(moltin_api_token):
@@ -87,9 +82,10 @@ def main():
 
     moltin_api_token, expiration_time = get_access_token(moltin_client_id,
                                                          moltin_client_secret)
-    add_products_to_store(moltin_api_token)
-    flow_slug = create_flow_and_fields(moltin_api_token)
-    add_entries_to_flow(moltin_api_token, flow_slug)
+
+    # add_products_to_store(moltin_api_token)
+    # flow_slug = create_flow_and_fields(moltin_api_token)
+    # add_entries_to_flow(moltin_api_token, flow_slug)
 
 
 if __name__ == '__main__':
