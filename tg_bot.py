@@ -4,6 +4,7 @@ from textwrap import dedent
 import redis
 import requests as requests
 
+from geopy import distance
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Filters, Updater
 from telegram.ext import CallbackQueryHandler, CommandHandler, MessageHandler
@@ -12,7 +13,7 @@ from logs_handler import CustomLogsHandler
 
 from moltin_api import get_products, add_product_to_cart, \
     get_product, get_image_url, get_cart, remove_cart_item, create_customer, \
-    get_access_token
+    get_access_token, get_all_restaurants
 
 _database = None
 
@@ -202,12 +203,13 @@ def handle_user_geolocation(bot, update):
         env("MOLTIN_CLIENT_SECRET"),
         db
     )
+
     if update.message.location:
         message = update.message
 
         current_position = (
-            message.location.longitude,
-            message.location.latitude
+            message.location.latitude,
+            message.location.longitude
         )
     else:
         message = update.message
@@ -216,12 +218,39 @@ def handle_user_geolocation(bot, update):
             update.message.text
         )
         if not current_position:
-            update.message.reply_text(f'Введите название места заново')
+            update.message.reply_text('Не могу распознать адрес')
             return 'HANDLE_LOCATION'
 
-    update.message.reply_text(f'{current_position}')
+    restaurants = get_all_restaurants(moltin_api_token)
+
+    for restaurant in restaurants:
+        restaurant_position = restaurant['latitude'], restaurant['longitude']
+        restaurant['distance'] = distance.distance(
+            restaurant_position,
+            current_position
+        ).km
+
+    nearest_restaurant = min(restaurants, key=get_distance)
+    distance_between_rest_and_user = nearest_restaurant['distance']
+    if distance_between_rest_and_user <= 0.5:
+        update.message.reply_text(
+            'Можете забрать пиццу сами, либо с бесплатной доставкой'
+        )
+    elif 0.5 < distance_between_rest_and_user <= 5:
+        update.message.reply_text('Доставка будет стоить 100 рублей')
+    elif 5 < distance_between_rest_and_user <= 20:
+        update.message.reply_text(
+            'Доставка будет стоить 300 рублей'
+        )
+    else:
+        update.message.reply_text(
+            'К сожалению, вы слишком далеко, возможен только самовывоз')
 
     return 'HANDLE_LOCATION'
+
+
+def get_distance(restaurant):
+    return restaurant['distance']
 
 
 def handle_users_reply(bot, update):
@@ -294,7 +323,7 @@ def fetch_coordinates(apikey, address):
 
     most_relevant = found_places[0]
     lon, lat = most_relevant['GeoObject']['Point']['pos'].split(" ")
-    return float(lon), float(lat)
+    return float(lat), float(lon)
 
 
 if __name__ == '__main__':

@@ -281,3 +281,16 @@ def get_access_token(moltin_client_id,
     return moltin_api_token, expire_time
 
 
+def get_all_restaurants(moltin_api_token):
+
+    headers = {
+        'Authorization': f'Bearer {moltin_api_token}',
+        'Content-Type': 'application/json',
+    }
+
+    response = requests.get('https://api.moltin.com/v2/flows/pizzeria/entries/',
+                            headers=headers)
+    response.raise_for_status()
+    return response.json()['data']
+
+
