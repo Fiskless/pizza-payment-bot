@@ -180,7 +180,6 @@ def add_product_to_cart(cart_id, product_id, moltin_api_token):
     response = requests.post(f'https://api.moltin.com/v2/carts/{cart_id}/items',
                              headers=headers,
                              json=payload)
-    print(response.json())
     response.raise_for_status()
     return response.json()['data']
 

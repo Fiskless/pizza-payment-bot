@@ -2,8 +2,9 @@ import logging
 from textwrap import dedent
 
 import redis
+import requests as requests
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Filters, Updater
 from telegram.ext import CallbackQueryHandler, CommandHandler, MessageHandler
 from environs import Env
@@ -118,8 +119,10 @@ def handle_menu(bot, update):
 
         keyboard.append([InlineKeyboardButton('Назад',
                                               callback_data='back-to-menu')])
-        keyboard.append([InlineKeyboardButton('Оплатить',
-                                              callback_data='waiting_email')])
+        keyboard.append([InlineKeyboardButton(
+            'Оплатить',
+            callback_data='waiting_user_location'
+        )])
 
         reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -172,9 +175,9 @@ def handle_cart(bot, update):
 
     query = update.callback_query
 
-    if query.data == "waiting_email":
-        query.message.reply_text('Пришлите, пожалуйста, ваш email')
-        return 'WAITING_EMAIL'
+    if query.data == "waiting_user_location":
+        query.message.reply_text('Пришлите нам ваш адрес или геолокацию')
+        return 'HANDLE_LOCATION'
     if query.data == "back-to-menu":
 
         reply_markup = add_keyboard()
@@ -189,7 +192,7 @@ def handle_cart(bot, update):
         return "HANDLE_DESCRIPTION"
 
 
-def waiting_email(bot, update):
+def handle_user_geolocation(bot, update):
     db = get_database_connection(database_password,
                                  database_host,
                                  database_port)
@@ -199,11 +202,26 @@ def waiting_email(bot, update):
         env("MOLTIN_CLIENT_SECRET"),
         db
     )
-    users_reply = update.message.text
-    update.message.reply_text(f'Вы прислали мне эту почту: {users_reply}')
-    create_customer(users_reply, moltin_api_token)
+    if update.message.location:
+        message = update.message
 
-    return 'WAITING_EMAIL'
+        current_position = (
+            message.location.longitude,
+            message.location.latitude
+        )
+    else:
+        message = update.message
+        current_position = fetch_coordinates(
+            env('YANDEX_GEO_APIKEY'),
+            update.message.text
+        )
+        if not current_position:
+            update.message.reply_text(f'Введите название места заново')
+            return 'HANDLE_LOCATION'
+
+    update.message.reply_text(f'{current_position}')
+
+    return 'HANDLE_LOCATION'
 
 
 def handle_users_reply(bot, update):
@@ -211,7 +229,6 @@ def handle_users_reply(bot, update):
     db = get_database_connection(database_password,
                                  database_host,
                                  database_port)
-
     if update.message:
         user_reply = update.message.text
         chat_id = update.message.chat_id
@@ -230,7 +247,7 @@ def handle_users_reply(bot, update):
         'HANDLE_MENU': handle_menu,
         'HANDLE_DESCRIPTION': back_to_menu,
         'HANDLE_CART': handle_cart,
-        'WAITING_EMAIL': waiting_email,
+        'HANDLE_LOCATION': handle_user_geolocation,
     }
     state_handler = states_functions[user_state]
 
@@ -262,6 +279,24 @@ def get_or_create_moltin_api_token(moltin_client_id,
     return moltin_api_token
 
 
+def fetch_coordinates(apikey, address):
+    base_url = "https://geocode-maps.yandex.ru/1.x"
+    response = requests.get(base_url, params={
+        "geocode": address,
+        "apikey": apikey,
+        "format": "json",
+    })
+    response.raise_for_status()
+    found_places = response.json()['response']['GeoObjectCollection']['featureMember']
+
+    if not found_places:
+        return None
+
+    most_relevant = found_places[0]
+    lon, lat = most_relevant['GeoObject']['Point']['pos'].split(" ")
+    return float(lon), float(lat)
+
+
 if __name__ == '__main__':
 
     env = Env()
@@ -277,5 +312,10 @@ if __name__ == '__main__':
     dispatcher = updater.dispatcher
     dispatcher.add_handler(CallbackQueryHandler(handle_users_reply))
     dispatcher.add_handler(MessageHandler(Filters.text, handle_users_reply))
+    dispatcher.add_handler(MessageHandler(
+        Filters.location,
+        handle_user_geolocation
+    )
+    )
     dispatcher.add_handler(CommandHandler('start', handle_users_reply))
     updater.start_polling()
